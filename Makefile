@@ -22,7 +22,7 @@ PROCESSOR = -mcpu=cortex-m0 -mthumb
 NRF= -DNRF51
 PROGRAM=nrf_mbs
 
-CFLAGS=$(PROCESSOR) $(NRF) $(INCLUDES) -g3 $(O) -Wall -fdata-sections -ffunction-sections -flto
+CFLAGS=$(PROCESSOR) $(NRF) $(INCLUDES) -g3 $(O) -Wall -Werror -fdata-sections -ffunction-sections -flto 
 # --specs=nano.specs -flto
 ASFLAGS=$(PROCESSOR)
 LDFLAGS=$(PROCESSOR) $(O) -g3 --specs=nano.specs -Wl,-Map=$(PROGRAM).map -Wl,--gc-sections,--entry=Reset_Handler -flto
@@ -55,11 +55,20 @@ $(PROGRAM).elf: $(OBJS)
 clean:
 	rm -f $(PROGRAM).bin $(PROGRAM).elf $(PROGRAM).hex $(PROGRAM).map $(OBJS)
 
+flash_s110: s110/s110_nrf51822_7.3.0_softdevice.hex
+	$(OPENOCD) -d2 -f $(OPENOCD_INTERFACE) $(OPENOCD_CMDS) -f $(OPENOCD_TARGET) -c init -c targets -c "reset halt" \
+                 -c "nrf51 mass_erase" \
+                 -c "flash write_image erase s110/s110_nrf51822_7.3.0_softdevice.hex" \
+                 -c "reset run" -c shutdown
 
 flash: $(PROGRAM).hex
 	$(OPENOCD) -d2 -f $(OPENOCD_INTERFACE) $(OPENOCD_CMDS) -f $(OPENOCD_TARGET) -c init -c targets -c "reset halt" \
                  -c "flash write_image erase $(PROGRAM).hex" -c "verify_image $(PROGRAM).hex" -c "reset halt" \
 	               -c "mww 0x4001e504 0x01" -c "mww 0x10001014 0x3F000" -c "reset run" -c shutdown
+
+mass_erase:
+	$(OPENOCD) -d2 -f $(OPENOCD_INTERFACE) $(OPENOCD_CMDS) -f $(OPENOCD_TARGET) -c init -c targets -c "reset halt" \
+                 -c "nrf51 mass_erase" -c shutdown
 
 reset:
 	$(OPENOCD) -d2 -f $(OPENOCD_INTERFACE) $(OPENOCD_CMDS) -f $(OPENOCD_TARGET) -c init -c targets -c "mww 0x40000544 0x01" -c reset -c shutdown
@@ -69,3 +78,8 @@ openocd: $(PROGRAM).elf
 
 gdb: $(PROGRAM).elf
 	$(GDB) -ex "target remote localhost:3333" -ex "monitor reset halt" $^
+
+flash_all:
+	make mass_erase
+	make flash_s110
+	make flash
